@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Followers & Following Manager</title>
+    <!-- Nunito font preload -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        width: 600px;
+        height: 500px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, Helvetica, Arial, sans-serif;
+      }
+      /* Initial loading state before JS loads */
+      #initial-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background-color: white;
+      }
+      .initial-spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #1cb0f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      .initial-message {
+        color: #666;
+        font-size: 16px;
+        font-family: "Nunito", sans-serif;
+      }
+      /* Solution to prevent CORS errors with images */
+      img {
+        content-visibility: auto;
+      }
+      /* Preloader for better image loading experience */
+      img[src*="duolingo.com"] {
+        background-image: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="%23dddddd" stroke-width="2" opacity="0.5"/></svg>');
+        background-position: center;
+        background-repeat: no-repeat;
+      }
+      /* Initial login reminder suggesting Duolingo login */
+      .login-reminder {
+        display: none;
+        padding: 20px;
+        text-align: center;
+        color: #777;
+        font-size: 14px;
+        line-height: 1.5;
+        background-color: #f8f8f8;
+        border-radius: 8px;
+        margin: 20px;
+      }
+      .login-reminder h3 {
+        color: #1cb0f6;
+        margin-bottom: 10px;
+      }
+      .login-reminder a {
+        color: #1cb0f6;
+        text-decoration: none;
+        font-weight: bold;
+      }
+      .login-reminder a:hover {
+        text-decoration: underline;
+      }
+      /* Storage viewer link */
+      .storage-viewer-link {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        font-size: 12px;
+        color: #ffffff;
+        text-decoration: none;
+        background-color: #58cc02;
+        padding: 5px 10px;
+        border-radius: 4px;
+        z-index: 1000;
+      }
+      .storage-viewer-link:hover {
+        text-decoration: underline;
+        background-color: #58cc02;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Storage viewer link -->
+    <a href="storage_viewer.html" class="storage-viewer-link" target="_blank"
+      >View Follow Data</a
+    >
+
+    <!-- Initial loading state that shows before JS initializes -->
+    <div id="initial-loading">
+      <div class="initial-spinner"></div>
+      <p class="initial-message">Loading extension...</p>
+    </div>
+
+    <div id="login-reminder" class="login-reminder">
+      <h3>Welcome to Followers & Following Manager</h3>
+      <p>To use this extension, you need to be logged in to Duolingo.</p>
+      <p>
+        If you haven't logged in yet,
+        <a href="https://www.duolingo.com/log-in" target="_blank"
+          >click here to log in</a
+        >.
+      </p>
+      <p>After logging in, close and reopen this extension.</p>
+    </div>
+
+    <!-- Include date-fns library -->
+    <script src="lib/date-fns.min.js"></script>
+    <script type="module" src="index.js"></script>
+  </body>
+</html>

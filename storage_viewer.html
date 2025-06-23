@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Storage Viewer - Duolingo Follow Dates</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f9f9f9;
+        color: #333;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #ddd;
+      }
+
+      h1 {
+        color: #58cc02;
+        margin-bottom: 10px;
+      }
+
+      .description {
+        color: #777;
+        font-style: italic;
+      }
+
+      .controls {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      button {
+        padding: 8px 16px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      button svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      #refresh-storage {
+        background-color: #1cb0f6;
+        color: white;
+      }
+
+      #refresh-storage:hover {
+        background-color: #0095d8;
+      }
+
+      #clear-storage {
+        background-color: #ff4b4b;
+        color: white;
+      }
+
+      #clear-storage:hover {
+        background-color: #e63939;
+      }
+
+      #export-storage {
+        background-color: #58cc02;
+        color: white;
+      }
+
+      #export-storage:hover {
+        background-color: #47a800;
+      }
+
+      #import-storage {
+        background-color: #ffb800;
+        color: white;
+      }
+
+      #import-storage:hover {
+        background-color: #e6a400;
+      }
+
+      .storage-data {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .storage-counts {
+        padding: 10px;
+        background-color: #f3f3f3;
+        border-radius: 4px;
+        margin-bottom: 20px;
+      }
+
+      .storage-section {
+        margin-bottom: 30px;
+      }
+
+      .storage-section h3 {
+        color: #1cb0f6;
+        margin-bottom: 10px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .storage-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+
+      .storage-table th,
+      .storage-table td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+      }
+
+      .storage-table th {
+        background-color: #f3f3f3;
+        font-weight: bold;
+      }
+
+      .storage-table tr:hover {
+        background-color: #f9f9f9;
+      }
+
+      .empty-data {
+        padding: 20px;
+        text-align: center;
+        color: #777;
+        font-style: italic;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+      }
+
+      .error {
+        color: #ff4b4b;
+        font-weight: bold;
+        padding: 10px;
+        background-color: #fff1f0;
+        border-radius: 4px;
+        border-left: 4px solid #ff4b4b;
+      }
+
+      .info-box {
+        background-color: #e7f5ff;
+        border-left: 4px solid #1cb0f6;
+        padding: 12px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+      }
+
+      .info-box h3 {
+        color: #1cb0f6;
+        margin-top: 0;
+        margin-bottom: 8px;
+      }
+
+      .info-box p {
+        margin: 8px 0;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .info-box ul {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+
+      .info-box li {
+        margin-bottom: 4px;
+      }
+
+      .export-import-box {
+        background-color: #eafbea;
+        border-left: 4px solid #58cc02;
+        padding: 12px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+      }
+
+      .export-import-box h3 {
+        color: #58cc02;
+        margin-top: 0;
+        margin-bottom: 8px;
+      }
+
+      .export-import-box p {
+        margin: 8px 0;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .export-import-controls {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .export-import-box li {
+        margin-bottom: 4px;
+      }
+
+      .update-usernames-box {
+        background-color: #eafbea;
+        border-left: 4px solid #58cc02;
+        padding: 12px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+      }
+
+      .update-usernames-box h3 {
+        color: #58cc02;
+        margin-top: 0;
+        margin-bottom: 8px;
+      }
+
+      .update-usernames-box p {
+        margin: 8px 0;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .update-controls {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .update-status {
+        margin-top: 12px;
+        padding: 10px;
+        border-radius: 4px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .update-status.in-progress {
+        background-color: #f0f7ff;
+        border-left: 3px solid #1cb0f6;
+      }
+
+      .update-status.success {
+        background-color: #eafbea;
+        border-left: 3px solid #58cc02;
+      }
+
+      .update-status.error {
+        background-color: #fff1f0;
+        border-left: 3px solid #ff4b4b;
+      }
+
+      .update-status p {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .update-status .note {
+        margin-top: 8px;
+        font-style: italic;
+        color: #666;
+      }
+
+      .success-icon,
+      .error-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+
+      .success-icon {
+        background-color: #58cc02;
+        color: white;
+      }
+
+      .error-icon {
+        background-color: #ff4b4b;
+        color: white;
+      }
+
+      .mini-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s linear infinite;
+        margin-right: 6px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      #update-usernames {
+        background-color: #58cc02;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      #update-usernames:hover {
+        background-color: #47a800;
+      }
+
+      #update-usernames:disabled {
+        background-color: #aaa;
+        cursor: not-allowed;
+      }
+
+      /* Update status styles */
+      .username-update-section {
+        margin-top: 20px;
+        margin-bottom: 20px;
+      }
+
+      .username-update-section .info-box {
+        background-color: #f5f9ff;
+        border-left: 4px solid #1cb0f6;
+        padding: 12px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .username-update-section .info-box p {
+        margin: 5px 0;
+      }
+
+      .username-update-section button {
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Storage Viewer - Duolingo Follow Dates</h1>
+      <p class="description">
+        This page allows you to view and manage follow date data stored in the
+        extension.
+      </p>
+    </header>
+
+    <div class="info-box">
+      <h3>Automatic Synchronization</h3>
+      <p>The extension now automatically synchronizes storage with Duolingo:</p>
+      <ul>
+        <li>
+          When you open the extension, it checks if there are people you stopped
+          following directly on Duolingo (without using the extension) and
+          removes those dates from storage.
+        </li>
+        <li>The same happens with people who stopped following you.</li>
+        <li>
+          This keeps the storage clean and accurate, even when you use the
+          official Duolingo website to follow/unfollow people.
+        </li>
+      </ul>
+    </div>
+
+    <div class="export-import-box">
+      <h3>Backup and Data Transfer</h3>
+      <p>
+        You can export your data to a JSON file and import it later. This is
+        useful for:
+      </p>
+      <ul>
+        <li>Backing up your follow dates</li>
+        <li>Transferring data between browsers or computers</li>
+        <li>Restoring data after reinstalling the extension</li>
+      </ul>
+      <div class="export-import-controls">
+        <button id="export-storage">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Export Data
+        </button>
+        <button id="import-storage">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Import Data
+        </button>
+      </div>
+    </div>
+
+    <div class="username-update-section">
+      <div class="info-box">
+        <h3>About Username Updates</h3>
+        <p>
+          <strong>Usernames are now updated automatically!</strong> Whenever you
+          open the extension and view your followers/following list, any missing
+          or outdated usernames will be automatically updated.
+        </p>
+        <p>
+          The button below is provided for manual updates if needed, but in most
+          cases, you don't need to use it anymore.
+        </p>
+        <p>
+          This optimization reduces the number of API calls made to Duolingo
+          servers.
+        </p>
+      </div>
+
+      <button id="update-usernames">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M21 2v6h-6"></path>
+          <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+          <path d="M3 22v-6h6"></path>
+          <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+        </svg>
+        Update Usernames
+      </button>
+      <div id="update-status"></div>
+    </div>
+
+    <div class="controls">
+      <button id="refresh-storage">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M23 4v6h-6"></path>
+          <path d="M1 20v-6h6"></path>
+          <path
+            d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+          ></path>
+        </svg>
+        Refresh Data
+      </button>
+      <button id="clear-storage">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path
+            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+          ></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+        Clear Data
+      </button>
+    </div>
+
+    <div id="storage-data" class="storage-data">
+      <p>Loading data...</p>
+    </div>
+
+    <!-- Add date-fns library -->
+    <script src="lib/date-fns.min.js"></script>
+    <script src="storage_debugger.js" type="module"></script>
+  </body>
+</html>
