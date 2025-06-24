@@ -1,15 +1,21 @@
 {
-  "name": "test2",
+  "name": "duolingo-followers-and-following-manager-extension",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "type": "module",
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "duolingo",
+    "followers",
+    "following",
+    "manager",
+    "extension"
+  ],
+  "author": "Kayque Goldner",
   "license": "MIT",
-  "description": "",
+  "description": "A Chrome extension that helps you manage your Duolingo followers and following list with enhanced features and better visibility.",
   "dependencies": {
     "date-fns": "^4.1.0"
   }
