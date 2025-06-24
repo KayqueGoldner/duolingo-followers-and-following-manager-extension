@@ -2,6 +2,12 @@
  * Script to view and manage extension storage data
  */
 
+// Global variable to store current sort state
+let currentSort = {
+  column: "timestamp", // Default sort by timestamp
+  direction: "desc", // Default direction
+};
+
 // Function to format a date as a readable string
 function formatDate(timestamp) {
   if (!timestamp) return "N/A";
@@ -79,12 +85,6 @@ function createDataTable(title, followDates, userDetails) {
   const table = document.createElement("table");
   table.className = "storage-table";
 
-  // Current sort state
-  let currentSort = {
-    column: "timestamp", // Default sort by timestamp
-    direction: "desc", // Default direction
-  };
-
   // Table header
   const thead = document.createElement("thead");
   const headerRow = document.createElement("tr");
@@ -132,6 +132,12 @@ function createDataTable(title, followDates, userDetails) {
         // Resort and rebuild table body
         rebuildTableBody(tbody, followDates, userDetails, currentSort);
       });
+
+      // Set initial sort indicator if this is the current sort column
+      if (header.key === currentSort.column) {
+        const indicator = th.querySelector(".sort-indicator");
+        indicator.textContent = currentSort.direction === "asc" ? " ↑" : " ↓";
+      }
     }
 
     headerRow.appendChild(th);
@@ -352,7 +358,9 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
           };
           await chrome.storage.local.set({ userDetails: storedUserDetails });
 
-          await displayStorageData();
+          // Instead of rebuilding the entire table, just update this row
+          const row = updateButton.closest("tr");
+          updateUserRow(row, userData, storedUserDetails);
         } else {
           throw new Error("Failed to fetch user details");
         }
@@ -379,6 +387,55 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
 
     tbody.appendChild(row);
   });
+}
+
+// Function to update a single user row without rebuilding the entire table
+function updateUserRow(row, userData, userDetails) {
+  const details = userDetails[userData.userId] || {};
+
+  // Update cells that might have changed
+  row.children[5].textContent = details.learningLanguage || "N/A"; // Learning Language
+  if (details.learningLanguage === "N/A")
+    row.children[5].className = "no-details";
+  else row.children[5].className = "";
+
+  row.children[6].textContent =
+    details.streak !== undefined ? details.streak : "N/A"; // Streak
+  if (details.streak === undefined) row.children[6].className = "no-details";
+  else row.children[6].className = "";
+
+  row.children[7].textContent = details.totalXp
+    ? details.totalXp.toLocaleString()
+    : "N/A"; // Total XP
+  if (!details.totalXp) row.children[7].className = "no-details";
+  else row.children[7].className = "";
+
+  row.children[8].textContent = details.hasPlus ? "✓" : "✗"; // Plus
+  row.children[8].className = details ? "" : "no-details";
+
+  // Last Updated
+  const lastUpdatedCell = row.children[9];
+  if (details.lastUpdated) {
+    const daysAgo = (Date.now() - details.lastUpdated) / (1000 * 60 * 60 * 24);
+    lastUpdatedCell.textContent = formatDate(details.lastUpdated);
+    lastUpdatedCell.className = daysAgo <= 7 ? "recent-update" : "old-update";
+  } else {
+    lastUpdatedCell.textContent = "Never";
+    lastUpdatedCell.className = "no-details";
+  }
+
+  // Update the update button
+  const updateButton = row.children[10].querySelector(".update-details-button");
+  updateButton.disabled = false;
+  updateButton.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 2v6h-6"></path>
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+      <path d="M3 22v-6h6"></path>
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+    </svg>
+  `;
+  updateButton.title = "Update user details";
 }
 
 // Add some CSS styles for the no-details class, update button and status cells
