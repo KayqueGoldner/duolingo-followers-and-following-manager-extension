@@ -93,10 +93,11 @@ function createDataTable(title, followDates, userDetails) {
   const headers = [
     { text: "User ID", key: "userId" },
     { text: "Username", key: "username" },
-    { text: "Is Following", key: "following" },
-    { text: "Is Followed By", key: "follower" },
+    { text: "You Follow", key: "following" },
+    { text: "Follows You", key: "follower" },
     { text: "First Interaction", key: "timestamp" },
-    { text: "Learning", key: "learning" },
+    { text: "Followers Count", key: "followersCount" },
+    { text: "Following Count", key: "followingCount" },
     { text: "Streak", key: "streak" },
     { text: "Total XP", key: "totalXp" },
     { text: "Plus", key: "plus" },
@@ -112,6 +113,7 @@ function createDataTable(title, followDates, userDetails) {
 
     if (header.key) {
       th.style.cursor = "pointer";
+      th.style.width = "min-content";
       th.addEventListener("click", () => {
         // Toggle direction if same column, otherwise default to ascending
         if (currentSort.column === header.key) {
@@ -194,7 +196,8 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
             : followerData
           : 0
       ),
-      learning: details.learningLanguage || "N/A",
+      followersCount: details.followersCount || 0,
+      followingCount: details.followingCount || 0,
       streak: details.streak !== undefined ? details.streak : -1,
       totalXp: details.totalXp || 0,
       plus: details.hasPlus || false,
@@ -212,7 +215,6 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
     switch (sort.column) {
       case "userId":
       case "username":
-      case "learning":
         comparison = String(a[sort.column]).localeCompare(
           String(b[sort.column])
         );
@@ -227,6 +229,8 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
       case "streak":
       case "totalXp":
       case "lastUpdated":
+      case "followersCount":
+      case "followingCount":
         comparison = a[sort.column] - b[sort.column];
         break;
       default:
@@ -273,11 +277,19 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
     dateCell.textContent = formatDate(userData.timestamp);
     row.appendChild(dateCell);
 
-    // Learning Language
-    const langCell = document.createElement("td");
-    langCell.textContent = userData.learning;
-    if (userData.learning === "N/A") langCell.className = "no-details";
-    row.appendChild(langCell);
+    // Followers Count
+    const followersCountCell = document.createElement("td");
+    followersCountCell.textContent = userData.details.followersCount || "N/A";
+    if (!userData.details.followersCount)
+      followersCountCell.className = "no-details";
+    row.appendChild(followersCountCell);
+
+    // Following Count
+    const followingCountCell = document.createElement("td");
+    followingCountCell.textContent = userData.details.followingCount || "N/A";
+    if (!userData.details.followingCount)
+      followingCountCell.className = "no-details";
+    row.appendChild(followingCountCell);
 
     // Streak
     const streakCell = document.createElement("td");
@@ -339,6 +351,7 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
         updateButton.disabled = true;
         updateButton.innerHTML = '<div class="mini-spinner"></div>';
 
+        // Get user details
         const response = await new Promise((resolve) =>
           chrome.runtime.sendMessage(
             {
@@ -349,13 +362,21 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
           )
         );
 
-        if (response && response.user) {
+        console.log("Response from getUserDetails:", response);
+
+        if (response && response.details) {
           const result = await chrome.storage.local.get(["userDetails"]);
           const storedUserDetails = result.userDetails || {};
           storedUserDetails[userData.userId] = {
-            ...response.user,
+            ...response.details,
             lastUpdated: Date.now(),
           };
+
+          console.log(
+            "Storing user details:",
+            storedUserDetails[userData.userId]
+          );
+
           await chrome.storage.local.set({ userDetails: storedUserDetails });
 
           // Instead of rebuilding the entire table, just update this row
@@ -392,29 +413,37 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
 // Function to update a single user row without rebuilding the entire table
 function updateUserRow(row, userData, userDetails) {
   const details = userDetails[userData.userId] || {};
+  console.log("Updating row with details:", details);
 
   // Update cells that might have changed
-  row.children[5].textContent = details.learningLanguage || "N/A"; // Learning Language
-  if (details.learningLanguage === "N/A")
+  row.children[5].textContent =
+    details.followersCount !== undefined ? details.followersCount : "N/A"; // Followers Count
+  if (details.followersCount === undefined)
     row.children[5].className = "no-details";
   else row.children[5].className = "";
 
   row.children[6].textContent =
-    details.streak !== undefined ? details.streak : "N/A"; // Streak
-  if (details.streak === undefined) row.children[6].className = "no-details";
+    details.followingCount !== undefined ? details.followingCount : "N/A"; // Following Count
+  if (details.followingCount === undefined)
+    row.children[6].className = "no-details";
   else row.children[6].className = "";
 
-  row.children[7].textContent = details.totalXp
-    ? details.totalXp.toLocaleString()
-    : "N/A"; // Total XP
-  if (!details.totalXp) row.children[7].className = "no-details";
+  row.children[7].textContent =
+    details.streak !== undefined ? details.streak : "N/A"; // Streak
+  if (details.streak === undefined) row.children[7].className = "no-details";
   else row.children[7].className = "";
 
-  row.children[8].textContent = details.hasPlus ? "✓" : "✗"; // Plus
-  row.children[8].className = details ? "" : "no-details";
+  row.children[8].textContent = details.totalXp
+    ? details.totalXp.toLocaleString()
+    : "N/A"; // Total XP
+  if (!details.totalXp) row.children[8].className = "no-details";
+  else row.children[8].className = "";
+
+  row.children[9].textContent = details.hasPlus ? "✓" : "✗"; // Plus
+  row.children[9].className = details ? "" : "no-details";
 
   // Last Updated
-  const lastUpdatedCell = row.children[9];
+  const lastUpdatedCell = row.children[10];
   if (details.lastUpdated) {
     const daysAgo = (Date.now() - details.lastUpdated) / (1000 * 60 * 60 * 24);
     lastUpdatedCell.textContent = formatDate(details.lastUpdated);
@@ -425,7 +454,7 @@ function updateUserRow(row, userData, userDetails) {
   }
 
   // Update the update button
-  const updateButton = row.children[10].querySelector(".update-details-button");
+  const updateButton = row.children[11].querySelector(".update-details-button");
   updateButton.disabled = false;
   updateButton.innerHTML = `
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
