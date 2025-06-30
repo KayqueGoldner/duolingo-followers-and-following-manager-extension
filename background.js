@@ -71,6 +71,24 @@ setInterval(clearUserDetailsCache, CACHE_EXPIRATION);
 
 // Listen for messages from the popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log("Message received in background:", request);
+
+  if (request.type === "GET_USER_DETAILS") {
+    console.log("Getting user details for:", request.userId);
+
+    getUserDetails(request.userId, request.jwtToken)
+      .then((result) => {
+        console.log("Sending response back to storage_debugger:", result);
+        sendResponse(result);
+      })
+      .catch((error) => {
+        console.error("Error in getUserDetails:", error);
+        sendResponse({ error: error.message });
+      });
+
+    return true; // Keep the message channel open for async response
+  }
+
   // Check if we have both JWT token and user ID
   if (!JWT_TOKEN || !MY_USER_ID) {
     sendResponse({
@@ -147,6 +165,8 @@ function sendUsernameUpdateStats(followersUpdated, followingUpdated) {
 
 // Get user details
 async function getUserDetails(userId, jwtToken) {
+  console.log("Starting getUserDetails for userId:", userId);
+
   // Check if details are already in cache
   const cacheKey = userId.toString();
   if (userDetailsCache.has(cacheKey)) {
@@ -161,12 +181,11 @@ async function getUserDetails(userId, jwtToken) {
     }
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
-  const url = `https://www.duolingo.com/2017-06-30/users/${userId}?fields=courses,creationDate,fromLanguage,gemsConfig,globalAmbassadorStatus,hasPlus,id,learningLanguage,location,name,picture,privacySettings,roles,streak,streakData%7BcurrentStreak,previousStreak%7D,subscriberLevel,totalXp,username&_=${Date.now()}`;
-
   try {
-    const response = await fetch(url, {
+    console.log("Fetching user details from API...");
+    // Get user details
+    const userUrl = `https://www.duolingo.com/2017-06-30/users/${userId}?fields=courses,creationDate,fromLanguage,gemsConfig,globalAmbassadorStatus,hasPlus,id,learningLanguage,location,name,picture,privacySettings,roles,streak,streakData%7BcurrentStreak,previousStreak%7D,subscriberLevel,totalXp,username&_=${Date.now()}`;
+    const userResponse = await fetch(userUrl, {
       method: "GET",
       headers: {
         authorization: jwtToken,
@@ -174,12 +193,55 @@ async function getUserDetails(userId, jwtToken) {
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch user details: ${response.status}`);
+    if (!userResponse.ok) {
+      throw new Error(`Failed to fetch user details: ${userResponse.status}`);
     }
 
-    const data = await response.json();
-    const result = { user: data };
+    const userData = await userResponse.json();
+    console.log("User data received:", userData);
+
+    // Get followers count
+    console.log("Fetching followers count...");
+    const followersUrl = `https://www.duolingo.com/2017-06-30/friends/users/${userId}/followers?pageSize=1&_=${Date.now()}`;
+    const followersResponse = await fetch(followersUrl, {
+      method: "GET",
+      headers: {
+        authorization: jwtToken,
+        "Content-Type": "application/json",
+      },
+    });
+
+    // Get following count
+    console.log("Fetching following count...");
+    const followingUrl = `https://www.duolingo.com/2017-06-30/friends/users/${userId}/following?pageSize=1&_=${Date.now()}`;
+    const followingResponse = await fetch(followingUrl, {
+      method: "GET",
+      headers: {
+        authorization: jwtToken,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!followersResponse.ok || !followingResponse.ok) {
+      throw new Error("Failed to fetch followers/following counts");
+    }
+
+    const followersData = await followersResponse.json();
+    const followingData = await followingResponse.json();
+
+    console.log("Followers data:", followersData);
+    console.log("Following data:", followingData);
+
+    // Create the result object with all user details
+    const result = {
+      details: {
+        ...userData,
+        followersCount: followersData.followers?.totalUsers || 0,
+        followingCount: followingData.following?.totalUsers || 0,
+      },
+    };
+
+    console.log("Final result object:", result);
 
     // Store in cache with current timestamp
     userDetailsCache.set(cacheKey, {
@@ -189,7 +251,7 @@ async function getUserDetails(userId, jwtToken) {
 
     return result;
   } catch (error) {
-    console.error("Error fetching user details:", error);
+    console.error("Error in getUserDetails:", error);
     throw error;
   }
 }
