@@ -98,6 +98,42 @@ If you encounter issues:
 3. Ensure you're logged into Duolingo
 4. Try clearing the extension's storage and reloading
 
+## Storage Debugger
+
+The extension includes a built-in storage debugger tool (`storage_viewer.html`) to help diagnose and troubleshoot data-related issues:
+
+### Accessing the Storage Debugger
+
+1. Go to `chrome://extensions/`
+2. Find "Followers & Following Manager for Duolingo"
+3. Click on "background page" under "Inspect views"
+4. Navigate to the "Storage" tab in the developer tools
+
+### Features
+
+- View all stored data in real-time
+- Inspect follower and following lists
+- Check following dates and user metadata
+- Clear specific data entries or all storage
+- Export storage data for debugging
+
+### Common Debug Tasks
+
+1. **Viewing Stored Data**:
+   - Open the storage viewer
+   - Select the data category (followers/following)
+   - Data is displayed in a structured JSON format
+
+2. **Clearing Cache**:
+   - Use the "Clear All" button to reset storage
+   - Individual entries can be removed selectively
+   - Reload the extension after clearing cache
+
+3. **Troubleshooting Data Issues**:
+   - Compare local storage with Duolingo API responses
+   - Check timestamps for data freshness
+   - Verify user IDs and following dates
+
 ## Privacy
 
 This extension only accesses data related to your Duolingo followers and following list. All data is stored locally on your device and is not shared with any third parties. 
