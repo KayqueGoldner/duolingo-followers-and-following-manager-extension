@@ -8,6 +8,18 @@ let currentSort = {
   direction: "desc", // Default direction
 };
 
+// Add filter state object
+let currentFilters = {
+  dateFrom: null,
+  dateTo: null,
+  followStatus: "all",
+  plusStatus: "all",
+  streakFrom: null,
+  streakTo: null,
+  xpFrom: null,
+  xpTo: null,
+};
+
 // Function to format a date as a readable string
 function formatDate(timestamp) {
   if (!timestamp) return "N/A";
@@ -38,19 +50,170 @@ async function displayStorageData() {
       ...Object.keys(followDates.followers),
     ]);
 
-    // Show counts
+    // Show counts and filters section
+    const statsAndFilters = document.createElement("div");
+    statsAndFilters.className = "stats-and-filters";
+
+    // Create counts section
+    const countInfo = document.createElement("div");
+    countInfo.className = "storage-counts";
+
+    // Get filtered count if filters are active
+    const usersArray = Array.from(uniqueUsers).map((userId) => {
+      const followingData = followDates.following[userId];
+      const followerData = followDates.followers[userId];
+      const details = userDetails[userId] || {};
+      const username =
+        (followingData && followingData.username) ||
+        (followerData && followerData.username) ||
+        "Unknown";
+
+      return {
+        userId,
+        username,
+        following: !!followingData,
+        follower: !!followerData,
+        timestamp: Math.max(
+          followingData
+            ? typeof followingData === "object"
+              ? followingData.timestamp
+              : followingData
+            : 0,
+          followerData
+            ? typeof followerData === "object"
+              ? followerData.timestamp
+              : followerData
+            : 0
+        ),
+        followersCount: details.followersCount || 0,
+        followingCount: details.followingCount || 0,
+        streak: details.streak !== undefined ? details.streak : -1,
+        totalXp: details.totalXp || 0,
+        plus: details.hasPlus || false,
+        lastUpdated: details.lastUpdated || 0,
+        details,
+      };
+    });
+
+    const filteredUsers = usersArray.filter(applyFilters);
     const followingCount = Object.keys(followDates.following).length;
     const followersCount = Object.keys(followDates.followers).length;
     const uniqueCount = uniqueUsers.size;
+    const filteredCount = filteredUsers.length;
 
-    const countInfo = document.createElement("div");
-    countInfo.className = "storage-counts";
     countInfo.innerHTML = `
       <p><strong>Total Unique Users:</strong> ${uniqueCount}</p>
+      <p><strong>Filtered Users:</strong> ${filteredCount} of ${uniqueCount} users</p>
       <p><strong>Following:</strong> ${followingCount} users</p>
       <p><strong>Followers:</strong> ${followersCount} users</p>
     `;
-    container.appendChild(countInfo);
+
+    // Create filters section
+    const filtersSection = document.createElement("div");
+    filtersSection.className = "filters-section";
+    filtersSection.innerHTML = `
+      <div class="filters-header">
+        <h3 class="filters-title">Filter Users</h3>
+        <div class="filter-actions">
+          <button id="apply-filters" class="filter-button">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Apply Filters
+          </button>
+          <button id="reset-filters" class="filter-button">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 1-9 9"></path>
+              <path d="M3 12a9 9 0 0 1 9-9"></path>
+              <path d="M21 12c0-4.97-4.03-9-9-9"></path>
+              <path d="M3 12c0 4.97 4.03 9 9 9"></path>
+            </svg>
+            Reset
+          </button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-group">
+          <label>Date Range</label>
+          <div class="filter-group-row">
+            <input type="date" id="date-from" placeholder="From">
+            <input type="date" id="date-to" placeholder="To">
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>Follow Status</label>
+          <select id="follow-status">
+            <option value="all">All Users</option>
+            <option value="mutual">Mutual Follows</option>
+            <option value="following">Following Only</option>
+            <option value="followers">Followers Only</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Plus Status</label>
+          <select id="plus-status">
+            <option value="all">All Users</option>
+            <option value="plus">Plus Users</option>
+            <option value="non-plus">Non-Plus Users</option>
+          </select>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-group">
+          <label>Streak Range</label>
+          <div class="filter-group-row">
+            <input type="number" id="streak-from" placeholder="Min" min="0">
+            <input type="number" id="streak-to" placeholder="Max" min="0">
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>XP Range</label>
+          <div class="filter-group-row">
+            <input type="number" id="xp-from" placeholder="Min" min="0">
+            <input type="number" id="xp-to" placeholder="Max" min="0">
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>&nbsp;</label>
+          <div class="filter-group-row">
+            <!-- Placeholder for future filters -->
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add event listeners for filter buttons
+    filtersSection
+      .querySelector("#apply-filters")
+      .addEventListener("click", updateFilters);
+    filtersSection
+      .querySelector("#reset-filters")
+      .addEventListener("click", resetFilters);
+
+    // Set current filter values
+    if (currentFilters.dateFrom)
+      filtersSection.querySelector("#date-from").value =
+        currentFilters.dateFrom;
+    if (currentFilters.dateTo)
+      filtersSection.querySelector("#date-to").value = currentFilters.dateTo;
+    filtersSection.querySelector("#follow-status").value =
+      currentFilters.followStatus;
+    filtersSection.querySelector("#plus-status").value =
+      currentFilters.plusStatus;
+    if (currentFilters.streakFrom)
+      filtersSection.querySelector("#streak-from").value =
+        currentFilters.streakFrom;
+    if (currentFilters.streakTo)
+      filtersSection.querySelector("#streak-to").value =
+        currentFilters.streakTo;
+    if (currentFilters.xpFrom)
+      filtersSection.querySelector("#xp-from").value = currentFilters.xpFrom;
+    if (currentFilters.xpTo)
+      filtersSection.querySelector("#xp-to").value = currentFilters.xpTo;
+
+    statsAndFilters.appendChild(countInfo);
+    statsAndFilters.appendChild(filtersSection);
+    container.appendChild(statsAndFilters);
 
     // Create merged table if there's data
     if (uniqueUsers.size > 0) {
@@ -158,6 +321,110 @@ function createDataTable(title, followDates, userDetails) {
   return section;
 }
 
+// Function to apply filters to user data
+function applyFilters(userData) {
+  // Date range filter
+  if (currentFilters.dateFrom || currentFilters.dateTo) {
+    const userDate = new Date(userData.timestamp);
+    if (currentFilters.dateFrom && userDate < new Date(currentFilters.dateFrom))
+      return false;
+    if (currentFilters.dateTo && userDate > new Date(currentFilters.dateTo))
+      return false;
+  }
+
+  // Follow status filter
+  if (currentFilters.followStatus !== "all") {
+    switch (currentFilters.followStatus) {
+      case "mutual":
+        if (!(userData.following && userData.follower)) return false;
+        break;
+      case "following":
+        if (!userData.following || userData.follower) return false;
+        break;
+      case "followers":
+        if (!userData.follower || userData.following) return false;
+        break;
+    }
+  }
+
+  // Plus status filter
+  if (currentFilters.plusStatus !== "all") {
+    if (currentFilters.plusStatus === "plus" && !userData.plus) return false;
+    if (currentFilters.plusStatus === "non-plus" && userData.plus) return false;
+  }
+
+  // Streak range filter
+  if (
+    currentFilters.streakFrom !== null &&
+    userData.streak < currentFilters.streakFrom
+  )
+    return false;
+  if (
+    currentFilters.streakTo !== null &&
+    userData.streak > currentFilters.streakTo
+  )
+    return false;
+
+  // XP range filter
+  if (
+    currentFilters.xpFrom !== null &&
+    userData.totalXp < currentFilters.xpFrom
+  )
+    return false;
+  if (currentFilters.xpTo !== null && userData.totalXp > currentFilters.xpTo)
+    return false;
+
+  return true;
+}
+
+// Function to update filters and refresh table
+function updateFilters() {
+  currentFilters = {
+    dateFrom: document.getElementById("date-from").value || null,
+    dateTo: document.getElementById("date-to").value || null,
+    followStatus: document.getElementById("follow-status").value,
+    plusStatus: document.getElementById("plus-status").value,
+    streakFrom: document.getElementById("streak-from").value
+      ? parseInt(document.getElementById("streak-from").value)
+      : null,
+    streakTo: document.getElementById("streak-to").value
+      ? parseInt(document.getElementById("streak-to").value)
+      : null,
+    xpFrom: document.getElementById("xp-from").value
+      ? parseInt(document.getElementById("xp-from").value)
+      : null,
+    xpTo: document.getElementById("xp-to").value
+      ? parseInt(document.getElementById("xp-to").value)
+      : null,
+  };
+  displayStorageData();
+}
+
+// Function to reset filters
+function resetFilters() {
+  document.getElementById("date-from").value = "";
+  document.getElementById("date-to").value = "";
+  document.getElementById("follow-status").value = "all";
+  document.getElementById("plus-status").value = "all";
+  document.getElementById("streak-from").value = "";
+  document.getElementById("streak-to").value = "";
+  document.getElementById("xp-from").value = "";
+  document.getElementById("xp-to").value = "";
+
+  currentFilters = {
+    dateFrom: null,
+    dateTo: null,
+    followStatus: "all",
+    plusStatus: "all",
+    streakFrom: null,
+    streakTo: null,
+    xpFrom: null,
+    xpTo: null,
+  };
+
+  displayStorageData();
+}
+
 // Function to rebuild table body with sorted data
 function rebuildTableBody(tbody, followDates, userDetails, sort) {
   // Clear existing rows
@@ -240,8 +507,28 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
     return sort.direction === "asc" ? comparison : -comparison;
   });
 
-  // Create table rows with sorted data
-  usersArray.forEach((userData) => {
+  // Apply filters to usersArray before creating table rows
+  const filteredUsers = usersArray.filter(applyFilters);
+
+  // Update the counts display
+  const countInfo = document.querySelector(".storage-counts");
+  if (countInfo) {
+    const totalUnique = uniqueUsers.size;
+    const filteredCount = filteredUsers.length;
+    countInfo.innerHTML = `
+      <p><strong>Total Unique Users:</strong> ${totalUnique}</p>
+      <p><strong>Filtered Users:</strong> ${filteredCount} of ${totalUnique} users</p>
+      <p><strong>Following:</strong> ${
+        Object.keys(followDates.following).length
+      } users</p>
+      <p><strong>Followers:</strong> ${
+        Object.keys(followDates.followers).length
+      } users</p>
+    `;
+  }
+
+  // Create table rows with filtered and sorted data
+  filteredUsers.forEach((userData) => {
     const row = document.createElement("tr");
 
     // User ID
@@ -924,5 +1211,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const updateUsernamesButton = document.getElementById("update-usernames");
   if (updateUsernamesButton) {
     updateUsernamesButton.addEventListener("click", updateUsernames);
+  }
+
+  // Add listeners for filter buttons
+  const applyFiltersButton = document.getElementById("apply-filters");
+  if (applyFiltersButton) {
+    applyFiltersButton.addEventListener("click", updateFilters);
+  }
+
+  const resetFiltersButton = document.getElementById("reset-filters");
+  if (resetFiltersButton) {
+    resetFiltersButton.addEventListener("click", resetFilters);
   }
 });

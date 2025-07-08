@@ -100,14 +100,24 @@
       }
 
       .storage-counts {
-        padding: 10px;
-        background-color: #f3f3f3;
-        border-radius: 4px;
-        margin-bottom: 20px;
+        padding: 15px;
+        background-color: white;
+        border-radius: 8px 8px 0 0;
+        margin-bottom: 0;
+        border-bottom: none;
+      }
+
+      .storage-counts p {
+        margin: 5px 0;
+        font-size: 14px;
+      }
+
+      .storage-counts p strong {
+        color: #1cb0f6;
       }
 
       .storage-section {
-        margin-bottom: 30px;
+        margin-top: 20px;
       }
 
       .storage-section h3 {
@@ -361,6 +371,114 @@
 
       .username-update-section button {
         margin-top: 10px;
+      }
+
+      /* Updated Filter Styles */
+      .filters-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 0;
+        border-top: 1px solid #eee;
+      }
+
+      .filters-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .filters-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #1cb0f6;
+        margin: 0;
+        flex: 1;
+      }
+
+      .filter-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .filter-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        margin-bottom: 10px;
+      }
+
+      .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .filter-group label {
+        font-size: 13px;
+        font-weight: 600;
+        color: #666;
+      }
+
+      .filter-group-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .filter-group input,
+      .filter-group select {
+        padding: 6px 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 13px;
+        flex: 1;
+        height: 32px;
+      }
+
+      .filter-group input:focus,
+      .filter-group select:focus {
+        border-color: #1cb0f6;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(28, 176, 246, 0.1);
+      }
+
+      .filter-button {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .filter-button svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      #apply-filters {
+        background-color: #1cb0f6;
+        color: white;
+      }
+
+      #apply-filters:hover {
+        background-color: #0095d8;
+      }
+
+      #reset-filters {
+        background-color: #ff4b4b;
+        color: white;
+      }
+
+      #reset-filters:hover {
+        background-color: #e63939;
       }
     </style>
   </head>
