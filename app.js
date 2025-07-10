@@ -48,6 +48,7 @@ async function initializeApp() {
   // Progress indicators
   const loadingMessage = document.getElementById("loading-message");
   const progressBar = document.getElementById("progress-bar");
+  const loadingSteps = document.querySelector(".loading-steps");
 
   // Start with connecting step
   updateLoadingStep("connect");
@@ -58,7 +59,12 @@ async function initializeApp() {
       loadingMessage.textContent = message.message;
       progressBar.style.width = `${message.progress}%`;
 
-      // Update step indicators based on progress
+      // Update loading steps progress
+      if (loadingSteps) {
+        loadingSteps.style.setProperty("--progress", `${message.progress}%`);
+      }
+
+      // Update step indicators based on progress percentage
       if (message.progress < 25) {
         updateLoadingStep("connect");
       } else if (message.progress < 50) {
@@ -66,7 +72,7 @@ async function initializeApp() {
       } else if (message.progress < 75) {
         updateLoadingStep("following");
       } else {
-        updateLoadingStep("dates");
+        updateLoadingStep("dates", message.progress === 100);
       }
     } else if (message.action === "usernameUpdateStats") {
       // Display a notification about username updates if any occurred

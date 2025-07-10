@@ -35,6 +35,16 @@ export async function renderUserCards(
     return;
   }
 
+  // Show loading skeletons first
+  const skeletonFragment = document.createDocumentFragment();
+  const numSkeletons = Math.min(5, users.length); // Show up to 5 skeletons
+
+  for (let i = 0; i < numSkeletons; i++) {
+    const skeleton = createSkeletonCard();
+    skeletonFragment.appendChild(skeleton);
+  }
+  container.appendChild(skeletonFragment);
+
   // Create document fragment for batch DOM operations
   const fragment = document.createDocumentFragment();
 
@@ -44,6 +54,11 @@ export async function renderUserCards(
   // Function to process a batch of users
   async function processBatch(startIndex) {
     const endIndex = Math.min(startIndex + BATCH_SIZE, users.length);
+
+    // Remove skeletons when first batch is ready
+    if (startIndex === 0) {
+      container.innerHTML = "";
+    }
 
     // Process users in current batch
     for (let i = startIndex; i < endIndex; i++) {
@@ -73,6 +88,34 @@ export async function renderUserCards(
 
   // Start batch processing
   processBatch(0);
+}
+
+// Helper function to create a skeleton loading card
+function createSkeletonCard() {
+  const skeleton = document.createElement("div");
+  skeleton.className = "skeleton-card";
+
+  const avatar = document.createElement("div");
+  avatar.className = "skeleton-avatar";
+  skeleton.appendChild(avatar);
+
+  const content = document.createElement("div");
+  content.className = "skeleton-content";
+
+  const title = document.createElement("div");
+  title.className = "skeleton-line title";
+  content.appendChild(title);
+
+  const subtitle = document.createElement("div");
+  subtitle.className = "skeleton-line subtitle";
+  content.appendChild(subtitle);
+
+  const text = document.createElement("div");
+  text.className = "skeleton-line text";
+  content.appendChild(text);
+
+  skeleton.appendChild(content);
+  return skeleton;
 }
 
 /**
@@ -394,8 +437,8 @@ function setupExpandButtonHandler(
               )
             );
 
-            if (response && response.user) {
-              userDetails = response.user;
+            if (response && response.details) {
+              userDetails = response.details;
               // Save to local cache for future use
               userDetailsCache.set(userId, userDetails);
 
