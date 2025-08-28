@@ -10,6 +10,7 @@ A Chrome extension that helps you manage your Duolingo followers and following l
 - 💾 Local storage for quick access to user data
 - 🎯 Easy-to-use popup interface
 - 🔍 Built-in storage debugger for troubleshooting
+- 📅 **First interaction date preservation**: The extension preserves the original date when you first followed someone, even if you unfollow and follow them again
 
 ## Installation
 
@@ -97,6 +98,14 @@ If you encounter issues:
 2. Use the built-in storage debugger (storage_viewer.html)
 3. Ensure you're logged into Duolingo
 4. Try clearing the extension's storage and reloading
+
+### First Interaction Date Behavior
+
+The extension preserves the original "first interaction" date when you initially followed someone. This means:
+- If you unfollow someone and later follow them again, the displayed follow date will be the original date
+- This provides a more accurate picture of your relationship history
+- Inactive users (those you no longer follow) are preserved in storage for reference
+- To see both active and inactive users, use the storage debugger
 
 ## Storage Debugger
 

@@ -1173,5 +1173,157 @@ export function addStyles() {
       transform: scale(1);
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
+    
+    /* Styles for inactive users */
+    .inactive-user-card {
+      background: #fafafa;
+      border-left: 3px solid #999;
+      opacity: 0.8;
+    }
+    
+    .inactive-user-card:hover {
+      background: #f5f5f5;
+      transform: translateY(-1px);
+      opacity: 1;
+    }
+    
+    .loading-inactive {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    
+    .loading-inactive .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #999;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    
+    .loading-inactive p {
+      color: #666;
+      margin: 0;
+      font-size: 14px;
+    }
+    
+    .error-message {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      text-align: center;
+      color: #ff4b4b;
+    }
+    
+    .error-message h3 {
+      margin: 8px 0;
+      color: #ff4b4b;
+    }
+    
+    .error-message p {
+      margin: 8px 0;
+      color: #666;
+    }
+    
+    .user-avatar {
+      flex-shrink: 0;
+    }
+    
+    .avatar-placeholder {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+    }
+    
+    .user-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    
+    .user-name {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .relationship-badge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .relationship-badge.follower {
+      background: rgba(28, 176, 246, 0.1);
+      color: #1cb0f6;
+    }
+    
+    .relationship-badge.following {
+      background: rgba(255, 150, 0, 0.1);
+      color: #ff9600;
+    }
+    
+    .user-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .inactive-date {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #666;
+    }
+    
+    .inactive-date svg {
+      flex-shrink: 0;
+    }
+    
+    /* Tab adjustment for three tabs */
+    .tabs-container {
+      gap: 4px;
+    }
+    
+    .tab-button {
+      font-size: 13px;
+      padding: 10px 12px;
+    }
+    
+    .tab-button svg {
+      width: 14px;
+      height: 14px;
+    }
+    
+    /* Empty state styling */
+    .empty-message h3 {
+      margin: 8px 0;
+      color: #666;
+    }
+    
+    .empty-message p {
+      margin: 4px 0;
+      color: #888;
+      line-height: 1.4;
+    }
   `;
 }

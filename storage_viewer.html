@@ -492,18 +492,25 @@
     </header>
 
     <div class="info-box">
-      <h3>Automatic Synchronization</h3>
-      <p>The extension now automatically synchronizes storage with Duolingo:</p>
+      <h3>Automatic Synchronization & Data Preservation</h3>
+      <p>
+        The extension now automatically synchronizes storage with Duolingo while
+        preserving historical data:
+      </p>
       <ul>
         <li>
           When you open the extension, it checks if there are people you stopped
-          following directly on Duolingo (without using the extension) and
-          removes those dates from storage.
+          following directly on Duolingo (without using the extension) and marks
+          them as "inactive" in storage instead of removing them.
         </li>
         <li>The same happens with people who stopped following you.</li>
         <li>
-          This keeps the storage clean and accurate, even when you use the
-          official Duolingo website to follow/unfollow people.
+          This preserves your complete social history while keeping track of
+          current relationships.
+        </li>
+        <li>
+          You can use the filter options below to view active users, inactive
+          users, or all users.
         </li>
       </ul>
     </div>
@@ -511,13 +518,17 @@
     <div class="export-import-box">
       <h3>Backup and Data Transfer</h3>
       <p>
-        You can export your data to a JSON file and import it later. This is
-        useful for:
+        You can export your data to a JSON file and import it later. This
+        includes all active and inactive user relationships plus user details.
+        This is useful for:
       </p>
       <ul>
-        <li>Backing up your follow dates</li>
+        <li>
+          Backing up your complete follow history (active and inactive users)
+        </li>
         <li>Transferring data between browsers or computers</li>
         <li>Restoring data after reinstalling the extension</li>
+        <li>Preserving historical relationship data for analysis</li>
       </ul>
       <div class="export-import-controls">
         <button id="export-storage">

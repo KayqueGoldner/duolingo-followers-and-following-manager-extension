@@ -6,12 +6,90 @@ import {
   removeFollowing,
   syncFollowingStorage,
   syncFollowersStorage,
+  getInactiveUsers,
 } from "./follow_date_manager.js";
+import { withRetry, rateLimit, batchProcess } from "./utils/retryUtils.js";
+import {
+  initializeVersionedStorage,
+  updateSyncStats,
+} from "./utils/storageVersioning.js";
 
-// Cache to store user details and avoid repeated requests
-const userDetailsCache = new Map();
-// Cache expiration time (6 hours in milliseconds)
-const CACHE_EXPIRATION = 6 * 60 * 60 * 1000;
+// Enhanced cache with TTL and size limits
+class IntelligentCache {
+  constructor(maxSize = 1000, defaultTTL = 6 * 60 * 60 * 1000) {
+    this.cache = new Map();
+    this.maxSize = maxSize;
+    this.defaultTTL = defaultTTL;
+    this.accessOrder = new Map(); // Track access order for LRU
+  }
+
+  set(key, value, ttl = this.defaultTTL) {
+    const expiresAt = Date.now() + ttl;
+
+    // Remove expired entries if cache is at capacity
+    if (this.cache.size >= this.maxSize) {
+      this.cleanup();
+
+      // If still at capacity, remove least recently used
+      if (this.cache.size >= this.maxSize) {
+        const lruKey = this.accessOrder.keys().next().value;
+        this.delete(lruKey);
+      }
+    }
+
+    this.cache.set(key, { value, expiresAt });
+    this.accessOrder.set(key, Date.now());
+  }
+
+  get(key) {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+
+    if (Date.now() > entry.expiresAt) {
+      this.delete(key);
+      return null;
+    }
+
+    // Update access order
+    this.accessOrder.set(key, Date.now());
+    return entry.value;
+  }
+
+  delete(key) {
+    this.cache.delete(key);
+    this.accessOrder.delete(key);
+  }
+
+  clear() {
+    this.cache.clear();
+    this.accessOrder.clear();
+  }
+
+  cleanup() {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now > entry.expiresAt) {
+        this.delete(key);
+      }
+    }
+  }
+
+  size() {
+    return this.cache.size;
+  }
+
+  getStats() {
+    return {
+      size: this.cache.size,
+      maxSize: this.maxSize,
+      memoryUsage: this.cache.size / this.maxSize,
+    };
+  }
+}
+
+const userDetailsCache = new IntelligentCache();
+// Cache cleanup is handled on-demand during get/set operations
+// No automatic background processing to respect user privacy
 
 // Get user ID from cookies
 async function getUserId() {
@@ -34,40 +112,55 @@ async function getUserId() {
   }
 }
 
-// Initialize storage when loading the extension and check if data already exists
-async function testAndInitializeStorage() {
-  // Check current storage
-  const storageData = await chrome.storage.local.get(["followDates"]);
-  console.log("Current storage state:", storageData);
-
-  if (!storageData.followDates) {
-    console.log("Initializing storage with empty structure");
+// Initialize storage when loading the extension with versioning support
+async function initializeStorage() {
+  try {
+    await initializeVersionedStorage();
+    console.log("Versioned storage initialized successfully");
+  } catch (error) {
+    console.error("Failed to initialize versioned storage:", error);
+    // Fallback to basic initialization
     await chrome.storage.local.set({
       followDates: {
         followers: {},
         following: {},
       },
     });
-
-    // Check if initialization worked
-    const updatedStorage = await chrome.storage.local.get(["followDates"]);
-    console.log("Storage after initialization:", updatedStorage);
-  } else {
-    console.log("Storage is already initialized with data");
   }
 }
 
-// Call test function at initialization
-testAndInitializeStorage();
+// Initialize storage on extension startup
+initializeStorage();
 
 // Clear user details cache
 function clearUserDetailsCache() {
   userDetailsCache.clear();
-  console.log("User details cache cleared");
+  console.log(
+    "User details cache cleared, stats:",
+    userDetailsCache.getStats()
+  );
 }
 
-// Clear cache every 6 hours to ensure up-to-date data
-setInterval(clearUserDetailsCache, CACHE_EXPIRATION);
+// Enhanced cache management - no automatic clearing, let the intelligent cache handle it
+// Cache stats can be monitored through the cache.getStats() method
+
+// Function to notify content scripts about data updates
+function notifyContentScripts() {
+  chrome.tabs.query({ url: "https://*.duolingo.com/profile/*" }, (tabs) => {
+    tabs.forEach((tab) => {
+      chrome.tabs.sendMessage(
+        tab.id,
+        { action: "refreshInactiveBadge" },
+        (response) => {
+          // Ignore errors if content script isn't loaded
+          if (chrome.runtime.lastError) {
+            console.log("Content script not available on tab:", tab.id);
+          }
+        }
+      );
+    });
+  });
+}
 
 // Listen for messages from the popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -125,6 +218,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === "clearCache") {
     clearUserDetailsCache();
     sendResponse({ success: true, message: "Cache cleared successfully" });
+  } else if (request.action === "getInactiveUsers") {
+    getInactiveUsers()
+      .then((data) => sendResponse(data))
+      .catch((error) => sendResponse({ error: error.message }));
   }
 
   return true; // Indicates that the response will be sent asynchronously
@@ -163,71 +260,63 @@ function sendUsernameUpdateStats(followersUpdated, followingUpdated) {
     });
 }
 
-// Get user details
+// Get user details with intelligent caching and retry logic
 async function getUserDetails(userId, jwtToken) {
   console.log("Starting getUserDetails for userId:", userId);
 
   // Check if details are already in cache
   const cacheKey = userId.toString();
-  if (userDetailsCache.has(cacheKey)) {
-    const cachedData = userDetailsCache.get(cacheKey);
-    // Check if cache is still valid (not expired)
-    if (cachedData.timestamp > Date.now() - CACHE_EXPIRATION) {
-      console.log(`Using cached data for user ${userId}`);
-      return cachedData.data;
-    } else {
-      // If expired, remove from cache
-      userDetailsCache.delete(cacheKey);
-    }
+  const cachedData = userDetailsCache.get(cacheKey);
+  if (cachedData) {
+    console.log(`Using cached data for user ${userId}`);
+    return cachedData;
   }
 
   try {
     console.log("Fetching user details from API...");
+
+    const fetchWithRetry = async (url, headers) => {
+      return await withRetry(
+        async () => {
+          const response = await fetch(url, { method: "GET", headers });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.json();
+        },
+        {
+          maxAttempts: 3,
+          baseDelay: 1000,
+          retryOn: ["network", "timeout", "429", "500", "502", "503", "504"],
+          onRetry: (error, attempt, delay) => {
+            console.warn(
+              `Retry ${attempt} for user details ${userId} in ${delay}ms:`,
+              error.message
+            );
+          },
+        }
+      );
+    };
+
+    const headers = {
+      authorization: jwtToken,
+      "Content-Type": "application/json",
+    };
+
     // Get user details
     const userUrl = `https://www.duolingo.com/2017-06-30/users/${userId}?fields=courses,creationDate,fromLanguage,gemsConfig,globalAmbassadorStatus,hasPlus,id,learningLanguage,location,name,picture,privacySettings,roles,streak,streakData%7BcurrentStreak,previousStreak%7D,subscriberLevel,totalXp,username&_=${Date.now()}`;
-    const userResponse = await fetch(userUrl, {
-      method: "GET",
-      headers: {
-        authorization: jwtToken,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!userResponse.ok) {
-      throw new Error(`Failed to fetch user details: ${userResponse.status}`);
-    }
-
-    const userData = await userResponse.json();
+    const userData = await fetchWithRetry(userUrl, headers);
     console.log("User data received:", userData);
 
     // Get followers count
     console.log("Fetching followers count...");
     const followersUrl = `https://www.duolingo.com/2017-06-30/friends/users/${userId}/followers?pageSize=1&_=${Date.now()}`;
-    const followersResponse = await fetch(followersUrl, {
-      method: "GET",
-      headers: {
-        authorization: jwtToken,
-        "Content-Type": "application/json",
-      },
-    });
+    const followersData = await fetchWithRetry(followersUrl, headers);
 
     // Get following count
     console.log("Fetching following count...");
     const followingUrl = `https://www.duolingo.com/2017-06-30/friends/users/${userId}/following?pageSize=1&_=${Date.now()}`;
-    const followingResponse = await fetch(followingUrl, {
-      method: "GET",
-      headers: {
-        authorization: jwtToken,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!followersResponse.ok || !followingResponse.ok) {
-      throw new Error("Failed to fetch followers/following counts");
-    }
-
-    const followersData = await followersResponse.json();
-    const followingData = await followingResponse.json();
+    const followingData = await fetchWithRetry(followingUrl, headers);
 
     console.log("Followers data:", followersData);
     console.log("Following data:", followingData);
@@ -243,11 +332,8 @@ async function getUserDetails(userId, jwtToken) {
 
     console.log("Final result object:", result);
 
-    // Store in cache with current timestamp
-    userDetailsCache.set(cacheKey, {
-      data: result,
-      timestamp: Date.now(),
-    });
+    // Store in cache with longer TTL for detailed user info (12 hours)
+    userDetailsCache.set(cacheKey, result, 12 * 60 * 60 * 1000);
 
     return result;
   } catch (error) {
@@ -256,42 +342,66 @@ async function getUserDetails(userId, jwtToken) {
   }
 }
 
-// Get followers data
+// Get followers data with enhanced error handling and retry logic
 async function getFollowers(jwtToken, userId) {
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  const startTime = Date.now();
+
+  const rateLimitedFetch = rateLimit(async (url, headers) => {
+    return await withRetry(
+      async () => {
+        const response = await fetch(url, {
+          method: "GET",
+          headers,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch followers: ${response.status}`);
+        }
+
+        return response.json();
+      },
+      {
+        maxAttempts: 3,
+        baseDelay: 1000,
+        retryOn: ["network", "timeout", "429", "500", "502", "503", "504"],
+        onRetry: (error, attempt, delay) => {
+          console.warn(
+            `Retry ${attempt} for followers fetch in ${delay}ms:`,
+            error.message
+          );
+          sendProgressUpdate(
+            `Retrying followers fetch (attempt ${attempt})...`,
+            25
+          );
+        },
+      }
+    );
+  }, 300);
+
   let allFollowers = [];
   let cursor = null;
   let page = 1;
   let totalUsers = 0;
+  let newFollowersCount = 0;
 
-  do {
-    const url = `https://www.duolingo.com/2017-06-30/friends/users/${userId}/followers?pageSize=500${
-      cursor ? `&pageAfter=${cursor}` : ""
-    }&viewerId=${userId}&_=${Date.now()}`;
+  try {
+    do {
+      const url = `https://www.duolingo.com/2017-06-30/friends/users/${userId}/followers?pageSize=500${
+        cursor ? `&pageAfter=${cursor}` : ""
+      }&viewerId=${userId}&_=${Date.now()}`;
 
-    try {
+      const headers = {
+        authorization: jwtToken,
+        "Content-Type": "application/json",
+      };
+
       sendProgressUpdate(`Fetching followers page ${page}...`, 25);
 
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          authorization: jwtToken,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch followers: ${response.status}`);
-      }
-
-      const { followers } = await response.json();
+      const { followers } = await rateLimitedFetch(url, headers);
       allFollowers = [...allFollowers, ...followers.users];
       cursor = followers.cursor;
       totalUsers = followers.totalUsers;
       page++;
-
-      // Add a small delay between requests to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Update progress based on how many users we've fetched vs total
       const progress = Math.min(
@@ -302,76 +412,117 @@ async function getFollowers(jwtToken, userId) {
         `Fetched ${allFollowers.length} of ${totalUsers} followers...`,
         progress
       );
-    } catch (error) {
-      console.error("Error fetching followers:", error);
-      throw error;
+    } while (cursor !== null);
+
+    sendProgressUpdate("Processing follower data...", 50);
+
+    // Register new followers
+    const newFollowers = await registerNewFollowers(allFollowers);
+    newFollowersCount = newFollowers.length;
+    if (newFollowers.length > 0) {
+      console.log(
+        `Detected ${newFollowers.length} new followers:`,
+        newFollowers
+      );
     }
-  } while (cursor !== null);
 
-  sendProgressUpdate("Processing follower data...", 50);
+    // Sync storage (mark followers who no longer follow you as inactive and update usernames)
+    const syncResults = await syncFollowersStorage(allFollowers);
 
-  // Register new followers
-  const newFollowers = await registerNewFollowers(allFollowers);
-  if (newFollowers.length > 0) {
-    console.log(`Detected ${newFollowers.length} new followers:`, newFollowers);
+    if (syncResults.inactivatedRecords.length > 0) {
+      console.log(
+        `Marked ${syncResults.inactivatedRecords.length} records of ex-followers as inactive in storage`
+      );
+    }
+
+    if (syncResults.updatedUsernames > 0) {
+      console.log(
+        `Updated usernames for ${syncResults.updatedUsernames} followers`
+      );
+      // Send update stats to popup if any usernames were updated
+      sendUsernameUpdateStats(syncResults.updatedUsernames, 0);
+    }
+
+    // Update sync statistics
+    const duration = Date.now() - startTime;
+    await updateSyncStats(duration, newFollowersCount, 0);
+
+    // Notify content scripts to refresh inactive badges
+    if (
+      syncResults.inactivatedRecords.length > 0 ||
+      syncResults.updatedUsernames > 0
+    ) {
+      notifyContentScripts();
+    }
+
+    return { followers: { users: allFollowers, totalUsers }, syncResults };
+  } catch (error) {
+    console.error("Error in getFollowers:", error);
+    sendProgressUpdate(`Error fetching followers: ${error.message}`, 0);
+    throw error;
   }
-
-  // Sync storage (remove followers who no longer follow you and update usernames)
-  const syncResults = await syncFollowersStorage(allFollowers);
-
-  if (syncResults.orphanedRecords.length > 0) {
-    console.log(
-      `Removed ${syncResults.orphanedRecords.length} records of ex-followers from storage`
-    );
-  }
-
-  if (syncResults.updatedUsernames > 0) {
-    console.log(
-      `Updated usernames for ${syncResults.updatedUsernames} followers`
-    );
-    // Send update stats to popup if any usernames were updated
-    sendUsernameUpdateStats(syncResults.updatedUsernames, 0);
-  }
-
-  return { followers: { users: allFollowers, totalUsers }, syncResults };
 }
 
-// Get following data
+// Get following data with enhanced error handling and retry logic
 async function getFollowing(jwtToken, userId) {
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  const startTime = Date.now();
+
+  const rateLimitedFetch = rateLimit(async (url, headers) => {
+    return await withRetry(
+      async () => {
+        const response = await fetch(url, {
+          method: "GET",
+          headers,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch following: ${response.status}`);
+        }
+
+        return response.json();
+      },
+      {
+        maxAttempts: 3,
+        baseDelay: 1000,
+        retryOn: ["network", "timeout", "429", "500", "502", "503", "504"],
+        onRetry: (error, attempt, delay) => {
+          console.warn(
+            `Retry ${attempt} for following fetch in ${delay}ms:`,
+            error.message
+          );
+          sendProgressUpdate(
+            `Retrying following fetch (attempt ${attempt})...`,
+            75
+          );
+        },
+      }
+    );
+  }, 300);
+
   let allFollowing = [];
   let cursor = null;
   let page = 1;
   let totalUsers = 0;
+  let newFollowingCount = 0;
 
-  do {
-    const url = `https://www.duolingo.com/2017-06-30/friends/users/${userId}/following?pageSize=500${
-      cursor ? `&pageAfter=${cursor}` : ""
-    }&viewerId=${userId}&_=${Date.now()}`;
+  try {
+    do {
+      const url = `https://www.duolingo.com/2017-06-30/friends/users/${userId}/following?pageSize=500${
+        cursor ? `&pageAfter=${cursor}` : ""
+      }&viewerId=${userId}&_=${Date.now()}`;
 
-    try {
+      const headers = {
+        authorization: jwtToken,
+        "Content-Type": "application/json",
+      };
+
       sendProgressUpdate(`Fetching followed users page ${page}...`, 75);
 
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          authorization: jwtToken,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch following: ${response.status}`);
-      }
-
-      const { following } = await response.json();
+      const { following } = await rateLimitedFetch(url, headers);
       allFollowing = [...allFollowing, ...following.users];
       cursor = following.cursor;
       totalUsers = following.totalUsers;
       page++;
-
-      // Add a small delay between requests to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Update progress based on how many users we've fetched vs total
       const progress = Math.min(
@@ -382,40 +533,55 @@ async function getFollowing(jwtToken, userId) {
         `Fetched ${allFollowing.length} of ${totalUsers} followed users...`,
         progress
       );
-    } catch (error) {
-      console.error("Error fetching following:", error);
-      throw error;
+    } while (cursor !== null);
+
+    // Register new followed users
+    const newFollowing = await registerNewFollowing(allFollowing);
+    newFollowingCount = newFollowing.length;
+    if (newFollowing.length > 0) {
+      console.log(
+        `Detected ${newFollowing.length} new followed users:`,
+        newFollowing
+      );
     }
-  } while (cursor !== null);
 
-  // Register new followed users
-  const newFollowing = await registerNewFollowing(allFollowing);
-  if (newFollowing.length > 0) {
-    console.log(
-      `Detected ${newFollowing.length} new followed users:`,
-      newFollowing
-    );
+    // Sync storage (mark people you no longer follow as inactive and update usernames)
+    const syncResults = await syncFollowingStorage(allFollowing);
+
+    if (syncResults.inactivatedRecords.length > 0) {
+      console.log(
+        `Marked ${syncResults.inactivatedRecords.length} records of users you no longer follow as inactive in storage`
+      );
+    }
+
+    if (syncResults.updatedUsernames > 0) {
+      console.log(
+        `Updated usernames for ${syncResults.updatedUsernames} followed users`
+      );
+      // Send update stats to popup if any usernames were updated
+      sendUsernameUpdateStats(0, syncResults.updatedUsernames);
+    }
+
+    sendProgressUpdate("Data loaded successfully", 100);
+
+    // Update sync statistics
+    const duration = Date.now() - startTime;
+    await updateSyncStats(duration, 0, newFollowingCount);
+
+    // Notify content scripts to refresh inactive badges
+    if (
+      syncResults.inactivatedRecords.length > 0 ||
+      syncResults.updatedUsernames > 0
+    ) {
+      notifyContentScripts();
+    }
+
+    return { following: { users: allFollowing, totalUsers }, syncResults };
+  } catch (error) {
+    console.error("Error in getFollowing:", error);
+    sendProgressUpdate(`Error fetching following: ${error.message}`, 0);
+    throw error;
   }
-
-  // Sync storage (remove people you no longer follow and update usernames)
-  const syncResults = await syncFollowingStorage(allFollowing);
-
-  if (syncResults.orphanedRecords.length > 0) {
-    console.log(
-      `Removed ${syncResults.orphanedRecords.length} records of users you no longer follow from storage`
-    );
-  }
-
-  if (syncResults.updatedUsernames > 0) {
-    console.log(
-      `Updated usernames for ${syncResults.updatedUsernames} followed users`
-    );
-    // Send update stats to popup if any usernames were updated
-    sendUsernameUpdateStats(0, syncResults.updatedUsernames);
-  }
-
-  sendProgressUpdate("Data loaded successfully", 100);
-  return { following: { users: allFollowing, totalUsers }, syncResults };
 }
 
 // Unfollow a user
@@ -441,6 +607,9 @@ async function handleUnfollow(targetUserId, jwtToken, userId) {
 
     // Remove following record
     await removeFollowing(targetUserId);
+
+    // Notify content scripts to refresh inactive badges
+    notifyContentScripts();
 
     return { successful: true, data };
   } catch (error) {
@@ -494,6 +663,9 @@ async function handleFollow(targetUserId, jwtToken, userId) {
     console.log(
       `You started following user ${username} (${targetUserId}) on ${followInfo.followDate}`
     );
+
+    // Notify content scripts to refresh inactive badges
+    notifyContentScripts();
 
     return { successful: true, data, followInfo };
   } catch (error) {
