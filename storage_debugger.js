@@ -73,6 +73,10 @@ async function displayStorageData() {
         username,
         following: !!followingData,
         follower: !!followerData,
+        followingActive: followingData
+          ? followingData.isActive !== false
+          : false,
+        followerActive: followerData ? followerData.isActive !== false : false,
         timestamp: Math.max(
           followingData
             ? typeof followingData === "object"
@@ -101,11 +105,25 @@ async function displayStorageData() {
     const uniqueCount = uniqueUsers.size;
     const filteredCount = filteredUsers.length;
 
+    // Calculate active and inactive counts
+    const activeFollowing = Object.values(followDates.following).filter(
+      (data) => data.isActive !== false
+    ).length;
+    const inactiveFollowing = Object.values(followDates.following).filter(
+      (data) => data.isActive === false
+    ).length;
+    const activeFollowers = Object.values(followDates.followers).filter(
+      (data) => data.isActive !== false
+    ).length;
+    const inactiveFollowers = Object.values(followDates.followers).filter(
+      (data) => data.isActive === false
+    ).length;
+
     countInfo.innerHTML = `
       <p><strong>Total Unique Users:</strong> ${uniqueCount}</p>
       <p><strong>Filtered Users:</strong> ${filteredCount} of ${uniqueCount} users</p>
-      <p><strong>Following:</strong> ${followingCount} users</p>
-      <p><strong>Followers:</strong> ${followersCount} users</p>
+      <p><strong>Following:</strong> ${activeFollowing} active, ${inactiveFollowing} inactive (${followingCount} total)</p>
+      <p><strong>Followers:</strong> ${activeFollowers} active, ${inactiveFollowers} inactive (${followersCount} total)</p>
     `;
 
     // Create filters section
@@ -147,6 +165,9 @@ async function displayStorageData() {
             <option value="mutual">Mutual Follows</option>
             <option value="following">Following Only</option>
             <option value="followers">Followers Only</option>
+            <option value="inactive-following">Inactive Following</option>
+            <option value="inactive-followers">Inactive Followers</option>
+            <option value="inactive-all">All Inactive</option>
           </select>
         </div>
         <div class="filter-group">
@@ -336,13 +357,46 @@ function applyFilters(userData) {
   if (currentFilters.followStatus !== "all") {
     switch (currentFilters.followStatus) {
       case "mutual":
-        if (!(userData.following && userData.follower)) return false;
+        if (
+          !(
+            userData.following &&
+            userData.follower &&
+            userData.followingActive &&
+            userData.followerActive
+          )
+        )
+          return false;
         break;
       case "following":
-        if (!userData.following || userData.follower) return false;
+        if (
+          !userData.following ||
+          !userData.followingActive ||
+          userData.follower
+        )
+          return false;
         break;
       case "followers":
-        if (!userData.follower || userData.following) return false;
+        if (
+          !userData.follower ||
+          !userData.followerActive ||
+          userData.following
+        )
+          return false;
+        break;
+      case "inactive-following":
+        if (!userData.following || userData.followingActive) return false;
+        break;
+      case "inactive-followers":
+        if (!userData.follower || userData.followerActive) return false;
+        break;
+      case "inactive-all":
+        if (
+          !(
+            (userData.following && !userData.followingActive) ||
+            (userData.follower && !userData.followerActive)
+          )
+        )
+          return false;
         break;
     }
   }
@@ -451,6 +505,8 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
       username,
       following: !!followingData,
       follower: !!followerData,
+      followingActive: followingData ? followingData.isActive !== false : false,
+      followerActive: followerData ? followerData.isActive !== false : false,
       timestamp: Math.max(
         followingData
           ? typeof followingData === "object"
@@ -544,19 +600,31 @@ function rebuildTableBody(tbody, followDates, userDetails, sort) {
     // Following Status
     const followingCell = document.createElement("td");
     followingCell.className = "status-cell";
-    followingCell.textContent = userData.following ? "✓" : "✗";
-    followingCell.classList.add(
-      userData.following ? "following" : "not-following"
-    );
+    if (userData.following) {
+      followingCell.textContent = userData.followingActive
+        ? "✓"
+        : "✗ (inactive)";
+      followingCell.classList.add(
+        userData.followingActive ? "following" : "inactive"
+      );
+    } else {
+      followingCell.textContent = "✗";
+      followingCell.classList.add("not-following");
+    }
     row.appendChild(followingCell);
 
     // Follower Status
     const followerCell = document.createElement("td");
     followerCell.className = "status-cell";
-    followerCell.textContent = userData.follower ? "✓" : "✗";
-    followerCell.classList.add(
-      userData.follower ? "following" : "not-following"
-    );
+    if (userData.follower) {
+      followerCell.textContent = userData.followerActive ? "✓" : "✗ (inactive)";
+      followerCell.classList.add(
+        userData.followerActive ? "following" : "inactive"
+      );
+    } else {
+      followerCell.textContent = "✗";
+      followerCell.classList.add("not-following");
+    }
     row.appendChild(followerCell);
 
     // First Interaction
@@ -810,6 +878,11 @@ style.textContent = `
     color: #ff4b4b;
   }
   
+  .status-cell.inactive {
+    color: #ff9500;
+    font-style: italic;
+  }
+  
   .recent-update {
     color: #000000;
   }
@@ -912,15 +985,48 @@ async function clearAllStorageData() {
 // Function to export storage data to a JSON file
 async function exportStorageData() {
   try {
-    const result = await chrome.storage.local.get(["followDates"]);
+    const result = await chrome.storage.local.get([
+      "followDates",
+      "userDetails",
+    ]);
     const followDates = result.followDates || { followers: {}, following: {} };
+    const userDetails = result.userDetails || {};
+
+    // Calculate statistics for export metadata
+    const activeFollowing = Object.values(followDates.following).filter(
+      (data) => data.isActive !== false
+    ).length;
+    const inactiveFollowing = Object.values(followDates.following).filter(
+      (data) => data.isActive === false
+    ).length;
+    const activeFollowers = Object.values(followDates.followers).filter(
+      (data) => data.isActive !== false
+    ).length;
+    const inactiveFollowers = Object.values(followDates.followers).filter(
+      (data) => data.isActive === false
+    ).length;
 
     // Add extra information to the exported file
     const exportData = {
       followDates: followDates,
+      userDetails: userDetails,
       exportDate: new Date().toISOString(),
-      version: "1.1",
-      description: "Duolingo Followers & Following Manager - Exported Data",
+      version: "1.2",
+      description:
+        "Duolingo Followers & Following Manager - Exported Data with Inactive User Support",
+      statistics: {
+        followers: {
+          active: activeFollowers,
+          inactive: inactiveFollowers,
+          total: activeFollowers + inactiveFollowers,
+        },
+        following: {
+          active: activeFollowing,
+          inactive: inactiveFollowing,
+          total: activeFollowing + inactiveFollowing,
+        },
+        userDetailsCount: Object.keys(userDetails).length,
+      },
     };
 
     // Convert to formatted JSON string
@@ -989,10 +1095,15 @@ function importStorageData() {
 
       // Get current data if merging
       let currentData = { followers: {}, following: {} };
+      let currentUserDetails = {};
       if (!action) {
         // If chose to merge
-        const result = await chrome.storage.local.get(["followDates"]);
+        const result = await chrome.storage.local.get([
+          "followDates",
+          "userDetails",
+        ]);
         currentData = result.followDates || { followers: {}, following: {} };
+        currentUserDetails = result.userDetails || {};
       }
 
       // Ensure imported data is in the correct format (with username)
@@ -1005,16 +1116,18 @@ function importStorageData() {
       Object.entries(importedData.followDates.followers).forEach(
         ([userId, data]) => {
           if (typeof data === "object" && data.timestamp) {
-            // New format
+            // New format (with isActive support)
             processedData.followers[userId] = {
               timestamp: data.timestamp,
               username: data.username || "Unknown",
+              isActive: data.isActive !== undefined ? data.isActive : true,
             };
           } else if (typeof data === "number") {
             // Old format (convert)
             processedData.followers[userId] = {
               timestamp: data,
               username: "Unknown",
+              isActive: true, // Assume legacy records are active
             };
           }
         }
@@ -1024,16 +1137,18 @@ function importStorageData() {
       Object.entries(importedData.followDates.following).forEach(
         ([userId, data]) => {
           if (typeof data === "object" && data.timestamp) {
-            // New format
+            // New format (with isActive support)
             processedData.following[userId] = {
               timestamp: data.timestamp,
               username: data.username || "Unknown",
+              isActive: data.isActive !== undefined ? data.isActive : true,
             };
           } else if (typeof data === "number") {
             // Old format (convert)
             processedData.following[userId] = {
               timestamp: data,
               username: "Unknown",
+              isActive: true, // Assume legacy records are active
             };
           }
         }
@@ -1049,27 +1164,64 @@ function importStorageData() {
           : { ...currentData.following, ...processedData.following },
       };
 
+      // Handle userDetails if present in import file
+      const importedUserDetails = importedData.userDetails || {};
+      const newUserDetails = action
+        ? { ...importedUserDetails }
+        : { ...currentUserDetails, ...importedUserDetails };
+
       // Save the data
-      await chrome.storage.local.set({ followDates: newData });
+      await chrome.storage.local.set({
+        followDates: newData,
+        userDetails: newUserDetails,
+      });
 
       // Update the display
       await displayStorageData();
 
-      // Success message
+      // Success message with detailed statistics
       const followersCount = Object.keys(
         importedData.followDates.followers
       ).length;
       const followingCount = Object.keys(
         importedData.followDates.following
       ).length;
+      const userDetailsCount = Object.keys(
+        importedData.userDetails || {}
+      ).length;
 
-      alert(
+      // Calculate active/inactive breakdown for imported data
+      const importedActiveFollowers = Object.values(
+        importedData.followDates.followers
+      ).filter((data) =>
+        typeof data === "object" ? data.isActive !== false : true
+      ).length;
+      const importedInactiveFollowers =
+        followersCount - importedActiveFollowers;
+
+      const importedActiveFollowing = Object.values(
+        importedData.followDates.following
+      ).filter((data) =>
+        typeof data === "object" ? data.isActive !== false : true
+      ).length;
+      const importedInactiveFollowing =
+        followingCount - importedActiveFollowing;
+
+      let message =
         `Import completed successfully!\n\n` +
-          `Imported data:\n` +
-          `- Followers: ${followersCount}\n` +
-          `- Following: ${followingCount}\n\n` +
-          `Method: ${action ? "Replacement" : "Merge"}`
-      );
+        `Imported data:\n` +
+        `- Followers: ${followersCount} total (${importedActiveFollowers} active, ${importedInactiveFollowers} inactive)\n` +
+        `- Following: ${followingCount} total (${importedActiveFollowing} active, ${importedInactiveFollowing} inactive)\n`;
+
+      if (userDetailsCount > 0) {
+        message += `- User Details: ${userDetailsCount} users\n`;
+      }
+
+      message +=
+        `\nMethod: ${action ? "Replacement" : "Merge"}\n\n` +
+        `Note: Inactive users represent past relationships that are no longer active.`;
+
+      alert(message);
     } catch (error) {
       console.error("Error importing data:", error);
       alert(`Error importing data: ${error.message}`);

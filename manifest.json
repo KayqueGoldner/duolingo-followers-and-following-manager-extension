@@ -5,7 +5,8 @@
   "description": "Lists users you're following and followers, with ability to unfollow users",
   "permissions": [
     "storage",
-    "cookies"
+    "cookies",
+    "tabs"
   ],
   "host_permissions": [
     "https://*.duolingo.com/*"
@@ -26,5 +27,12 @@
   "background": {
     "service_worker": "background.js",
     "type": "module"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.duolingo.com/profile/*"],
+      "js": ["content-script-profile.js"],
+      "run_at": "document_end"
+    }
+  ]
 } 

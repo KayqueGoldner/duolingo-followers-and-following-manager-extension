@@ -7,8 +7,8 @@
 /**
  * Storage structure:
  * followDates = {
- *   followers: { userId: { timestamp: number, username: string }, ... },
- *   following: { userId: { timestamp: number, username: string }, ... }
+ *   followers: { userId: { timestamp: number, username: string, isActive: boolean }, ... },
+ *   following: { userId: { timestamp: number, username: string, isActive: boolean }, ... }
  * }
  */
 
@@ -32,7 +32,7 @@ async function initializeStorage() {
 }
 
 /**
- * Migrate data from old format (userId: timestamp) to new format (userId: {timestamp, username})
+ * Migrate data from old format (userId: timestamp) to new format (userId: {timestamp, username, isActive})
  * @param {Object} followDates - Current follow dates object
  * @returns {Promise} Promise that resolves when migration is complete
  */
@@ -47,7 +47,15 @@ async function migrateDataIfNeeded(followDates) {
       followDates.followers[userId] = {
         timestamp: timestamp,
         username: "Unknown",
+        isActive: true, // Assume existing records are active
       };
+    } else if (
+      followDates.followers[userId] &&
+      typeof followDates.followers[userId].isActive === "undefined"
+    ) {
+      // Add isActive field to existing object records
+      needsMigration = true;
+      followDates.followers[userId].isActive = true;
     }
   }
 
@@ -59,13 +67,23 @@ async function migrateDataIfNeeded(followDates) {
       followDates.following[userId] = {
         timestamp: timestamp,
         username: "Unknown",
+        isActive: true, // Assume existing records are active
       };
+    } else if (
+      followDates.following[userId] &&
+      typeof followDates.following[userId].isActive === "undefined"
+    ) {
+      // Add isActive field to existing object records
+      needsMigration = true;
+      followDates.following[userId].isActive = true;
     }
   }
 
   // Save changes if needed
   if (needsMigration) {
-    console.log("Migrating follow dates from old format to new format");
+    console.log(
+      "Migrating follow dates from old format to new format with isActive field"
+    );
     await saveFollowDates(followDates);
   }
 }
@@ -110,11 +128,17 @@ export async function registerNewFollowers(currentFollowers) {
       storedFollowers[userId] = {
         timestamp: Date.now(),
         username: follower.username || "Unknown",
+        isActive: true,
       };
       newFollowers.push({
         ...follower,
         followDate: new Date(storedFollowers[userId].timestamp),
       });
+    } else if (storedFollowers[userId] && !storedFollowers[userId].isActive) {
+      // If user was inactive, reactivate them
+      storedFollowers[userId].isActive = true;
+      storedFollowers[userId].username =
+        follower.username || storedFollowers[userId].username;
     }
   });
 
@@ -144,11 +168,17 @@ export async function registerNewFollowing(currentFollowing) {
       storedFollowing[userId] = {
         timestamp: Date.now(),
         username: following.username || "Unknown",
+        isActive: true,
       };
       newFollowing.push({
         ...following,
         followDate: new Date(storedFollowing[userId].timestamp),
       });
+    } else if (storedFollowing[userId] && !storedFollowing[userId].isActive) {
+      // If user was inactive, reactivate them
+      storedFollowing[userId].isActive = true;
+      storedFollowing[userId].username =
+        following.username || storedFollowing[userId].username;
     }
   });
 
@@ -168,11 +198,20 @@ export async function registerFollow(userId, username = "Unknown") {
   await initializeStorage();
   const followDates = await getFollowDates();
 
-  // Register current date for the follow
-  followDates.following[userId] = {
-    timestamp: Date.now(),
-    username: username,
-  };
+  // Check if user already exists in storage
+  if (followDates.following[userId]) {
+    // User already exists, just reactivate and update username (preserve original timestamp)
+    followDates.following[userId].isActive = true;
+    followDates.following[userId].username =
+      username || followDates.following[userId].username;
+  } else {
+    // New user, register current date for the follow
+    followDates.following[userId] = {
+      timestamp: Date.now(),
+      username: username,
+      isActive: true,
+    };
+  }
 
   // Save changes
   await saveFollowDates(followDates);
@@ -194,11 +233,20 @@ export async function registerFollower(userId, username = "Unknown") {
   await initializeStorage();
   const followDates = await getFollowDates();
 
-  // Register current date for the follower
-  followDates.followers[userId] = {
-    timestamp: Date.now(),
-    username: username,
-  };
+  // Check if user already exists in storage
+  if (followDates.followers[userId]) {
+    // User already exists, just reactivate and update username (preserve original timestamp)
+    followDates.followers[userId].isActive = true;
+    followDates.followers[userId].username =
+      username || followDates.followers[userId].username;
+  } else {
+    // New user, register current date for the follower
+    followDates.followers[userId] = {
+      timestamp: Date.now(),
+      username: username,
+      isActive: true,
+    };
+  }
 
   // Save changes
   await saveFollowDates(followDates);
@@ -211,32 +259,36 @@ export async function registerFollower(userId, username = "Unknown") {
 }
 
 /**
- * Remove record when you unfollow someone
+ * Mark user as inactive when you unfollow someone (no longer removes the record)
  * @param {number} userId - ID of the user you unfollowed
- * @returns {Promise<void>} Promise that resolves when removal is complete
+ * @returns {Promise<void>} Promise that resolves when update is complete
  */
 export async function removeFollowing(userId) {
   await initializeStorage();
   const followDates = await getFollowDates();
 
-  // Remove record
-  delete followDates.following[userId];
+  // Mark as inactive instead of removing
+  if (followDates.following[userId]) {
+    followDates.following[userId].isActive = false;
+  }
 
   // Save changes
   await saveFollowDates(followDates);
 }
 
 /**
- * Remove record when someone unfollows you
+ * Mark user as inactive when someone unfollows you (no longer removes the record)
  * @param {number} userId - ID of the user who unfollowed you
- * @returns {Promise<void>} Promise that resolves when removal is complete
+ * @returns {Promise<void>} Promise that resolves when update is complete
  */
 export async function removeFollower(userId) {
   await initializeStorage();
   const followDates = await getFollowDates();
 
-  // Remove record
-  delete followDates.followers[userId];
+  // Mark as inactive instead of removing
+  if (followDates.followers[userId]) {
+    followDates.followers[userId].isActive = false;
+  }
 
   // Save changes
   await saveFollowDates(followDates);
@@ -295,12 +347,14 @@ export async function getAllFollowDates() {
       result.followers[userId] = {
         date: new Date(data.timestamp),
         username: data.username || "Unknown",
+        isActive: data.isActive !== undefined ? data.isActive : true,
       };
     } else if (typeof data === "number") {
       // Handle legacy data format (only timestamp)
       result.followers[userId] = {
         date: new Date(data),
         username: "Unknown",
+        isActive: true, // Assume legacy records are active
       };
     }
   });
@@ -311,12 +365,55 @@ export async function getAllFollowDates() {
       result.following[userId] = {
         date: new Date(data.timestamp),
         username: data.username || "Unknown",
+        isActive: data.isActive !== undefined ? data.isActive : true,
       };
     } else if (typeof data === "number") {
       // Handle legacy data format (only timestamp)
       result.following[userId] = {
         date: new Date(data),
         username: "Unknown",
+        isActive: true, // Assume legacy records are active
+      };
+    }
+  });
+
+  return result;
+}
+
+/**
+ * Get only inactive users (both followers and following)
+ * @returns {Promise<Object>} Promise that resolves with inactive users data
+ */
+export async function getInactiveUsers() {
+  const followDates = await getFollowDates();
+
+  const result = {
+    followers: {},
+    following: {},
+  };
+
+  // Process inactive followers
+  Object.entries(followDates.followers).forEach(([userId, data]) => {
+    if (typeof data === "object" && data.timestamp && data.isActive === false) {
+      result.followers[userId] = {
+        userId: userId,
+        date: new Date(data.timestamp),
+        username: data.username || "Unknown",
+        isActive: false,
+        relationshipType: "follower",
+      };
+    }
+  });
+
+  // Process inactive following
+  Object.entries(followDates.following).forEach(([userId, data]) => {
+    if (typeof data === "object" && data.timestamp && data.isActive === false) {
+      result.following[userId] = {
+        userId: userId,
+        date: new Date(data.timestamp),
+        username: data.username || "Unknown",
+        isActive: false,
+        relationshipType: "following",
       };
     }
   });
@@ -326,9 +423,9 @@ export async function getAllFollowDates() {
 
 /**
  * Sync storage with current list of people you follow
- * This removes people you no longer follow from storage
+ * This marks people you no longer follow as inactive instead of removing them
  * @param {Array} currentFollowing - Current list of people you follow
- * @returns {Promise<Object>} Promise that resolves with list of removed records and updated usernames
+ * @returns {Promise<Object>} Promise that resolves with list of inactive records and updated usernames
  */
 export async function syncFollowingStorage(currentFollowing) {
   await initializeStorage();
@@ -342,19 +439,25 @@ export async function syncFollowingStorage(currentFollowing) {
   });
 
   // Find people in storage that are no longer in your following list
-  const orphanedFollowing = [];
+  const inactivatedFollowing = [];
   Object.keys(storedFollowing).forEach((userId) => {
     if (!currentFollowingMap.has(userId)) {
       // Found someone you no longer follow
-      orphanedFollowing.push({
-        userId,
-        timestamp: storedFollowing[userId].timestamp,
-        date: new Date(storedFollowing[userId].timestamp),
-        username: storedFollowing[userId].username || "Unknown",
-      });
+      if (storedFollowing[userId].isActive !== false) {
+        // Only add to list if it wasn't already inactive
+        inactivatedFollowing.push({
+          userId,
+          timestamp: storedFollowing[userId].timestamp,
+          date: new Date(storedFollowing[userId].timestamp),
+          username: storedFollowing[userId].username || "Unknown",
+        });
+      }
 
-      // Remove from storage
-      delete storedFollowing[userId];
+      // Mark as inactive instead of removing
+      storedFollowing[userId].isActive = false;
+    } else {
+      // User is still being followed, make sure they're marked as active
+      storedFollowing[userId].isActive = true;
     }
   });
 
@@ -374,25 +477,27 @@ export async function syncFollowingStorage(currentFollowing) {
         storedFollowing[user.userId].username = user.username;
         updatedUsernames++;
       }
+      // Make sure active users are marked as active
+      storedFollowing[user.userId].isActive = true;
     }
   });
 
-  // Save changes if any updates were made or records removed
-  if (orphanedFollowing.length > 0 || updatedUsernames > 0) {
+  // Save changes if any updates were made or records inactivated
+  if (inactivatedFollowing.length > 0 || updatedUsernames > 0) {
     await saveFollowDates(followDates);
   }
 
   return {
-    orphanedRecords: orphanedFollowing,
+    inactivatedRecords: inactivatedFollowing,
     updatedUsernames: updatedUsernames,
   };
 }
 
 /**
  * Sync storage with current list of your followers
- * This removes people who no longer follow you from storage
+ * This marks people who no longer follow you as inactive instead of removing them
  * @param {Array} currentFollowers - Current list of your followers
- * @returns {Promise<Object>} Promise that resolves with list of removed records and updated usernames
+ * @returns {Promise<Object>} Promise that resolves with list of inactive records and updated usernames
  */
 export async function syncFollowersStorage(currentFollowers) {
   await initializeStorage();
@@ -406,19 +511,25 @@ export async function syncFollowersStorage(currentFollowers) {
   });
 
   // Find people in storage that are no longer in your followers list
-  const orphanedFollowers = [];
+  const inactivatedFollowers = [];
   Object.keys(storedFollowers).forEach((userId) => {
     if (!currentFollowersMap.has(userId)) {
       // Found someone who no longer follows you
-      orphanedFollowers.push({
-        userId,
-        timestamp: storedFollowers[userId].timestamp,
-        date: new Date(storedFollowers[userId].timestamp),
-        username: storedFollowers[userId].username || "Unknown",
-      });
+      if (storedFollowers[userId].isActive !== false) {
+        // Only add to list if it wasn't already inactive
+        inactivatedFollowers.push({
+          userId,
+          timestamp: storedFollowers[userId].timestamp,
+          date: new Date(storedFollowers[userId].timestamp),
+          username: storedFollowers[userId].username || "Unknown",
+        });
+      }
 
-      // Remove from storage
-      delete storedFollowers[userId];
+      // Mark as inactive instead of removing
+      storedFollowers[userId].isActive = false;
+    } else {
+      // User is still following, make sure they're marked as active
+      storedFollowers[userId].isActive = true;
     }
   });
 
@@ -438,16 +549,18 @@ export async function syncFollowersStorage(currentFollowers) {
         storedFollowers[user.userId].username = user.username;
         updatedUsernames++;
       }
+      // Make sure active followers are marked as active
+      storedFollowers[user.userId].isActive = true;
     }
   });
 
-  // Save changes if any updates were made or records removed
-  if (orphanedFollowers.length > 0 || updatedUsernames > 0) {
+  // Save changes if any updates were made or records inactivated
+  if (inactivatedFollowers.length > 0 || updatedUsernames > 0) {
     await saveFollowDates(followDates);
   }
 
   return {
-    orphanedRecords: orphanedFollowers,
+    inactivatedRecords: inactivatedFollowers,
     updatedUsernames: updatedUsernames,
   };
 }
